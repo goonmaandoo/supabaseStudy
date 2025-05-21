@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Supabase CRUD</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <h1>Supabase GitHub 로그인</h1>
+
+
+
+
+  <!-- 로그인 및 로그아웃 버튼 -->
+  <button id="login">GitHub 로그인</button>
+  <button id="logout" style="display: none;">로그아웃</button>
+
+
+
+
+  <!-- 로그인 상태 메시지 -->
+  <p id="status">로그인이 필요합니다.</p>
+
+
+
+
+  <h1>히스토리</h1>
+  <div id="history"></div>
+
+
+
+
+  <!-- 데이터 입력 폼 -->
+  <h2>새 기록 추가</h2>
+  <input type="text" id="title" placeholder="제목 입력" />
+  <input type="text" id="body" placeholder="내용 입력" />
+  <button id="create_btn">저장</button>
+
+
+
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Supabase 설정
+      const SUPABASE_URL = "https://smqmbvubkulphnbouswi.supabase.co";
+      const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtcW1idnVia3VscGhuYm91c3dpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzODY0OTYsImV4cCI6MjA2MDk2MjQ5Nn0.v703NUUPZP9Q8nJZOWM058dvw6HTf79CmZ56F6VTzd8";  
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+
+
+
+      let currentUser = null;
+
+
+
+
+      // GitHub OAuth 로그인
+      async function signInWithGithub() {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "github",
+          options: { redirectTo: "http://192.168.0.50:8000" }
+        });
+        if (error) console.error("로그인 실패:", error.message);
+      }
+
+
+
+
+      // 로그아웃
+      async function signOut() {
+        const { error } = await supabase.auth.signOut();
+        if (error) console.error("로그아웃 실패:", error.message);
+        updateUI();
+      }
+
+
+
+
+      // 현재 로그인 상태 확인 및 UI 업데이트
+      async function updateUI() {
+        const { data: { session } } = await supabase.auth.getSession();
+        const loginButton = document.getElementById("login");
+        const logoutButton = document.getElementById("logout");
+        const statusText = document.getElementById("status");
+
+
+
+
+        if (session && session.user) {
+          currentUser = session.user;
+          loginButton.style.display = "none";
+          logoutButton.style.display = "inline";
+          statusText.textContent = `로그인됨: ${session.user.email}`;
+        } else {
+          currentUser = null;
+          loginButton.style.display = "inline";
+          logoutButton.style.display = "none";
+          statusText.textContent = "로그인이 필요합니다.";
+        }
+      }
+
+
+
+
+      // 히스토리 데이터 가져오기
+      async function refreshHistory() {
+        let { data: records, error } = await supabase.from("pages").select("*");
+        if (error) {
+          console.error("데이터 불러오기 실패:", error.message);
+          return;
+        }
+
+
+
+
+        let content = "";
+        records.forEach(record => {
+          content += `
+            <div style="margin:20px 0">
+              <h2>${record.title}</h2>
+              <p>${record.body}</p>
+              <button onclick="deleteRecord(${record.id})">삭제</button>
+            </div>
+          `;
+        });
+
+
+
+
+        document.querySelector("#history").innerHTML = content;
+      }
+
+
+
+
+      // 기록 추가 (로그인 확인 추가)
+      async function recordHandler() {
+        if (!currentUser) {
+          alert("로그인 후 데이터를 저장할 수 있습니다.");
+          return;
+        }
+
+
+
+
+        const title = document.getElementById("title").value.trim();
+        const body = document.getElementById("body").value.trim();
+
+
+
+
+        if (!title || !body) {
+          alert("제목과 내용을 입력하세요.");
+          return;
+        }
+
+
+
+
+        const { error } = await supabase.from("pages").insert([{ title, body }]);
+        if (error) {
+          console.error("데이터 저장 실패:", error.message);
+          return;
+        }
+
+
+
+
+        document.getElementById("title").value = "";
+        document.getElementById("body").value = "";
+        refreshHistory();
+      }
+
+
+
+
+      // 기록 삭제
+      async function deleteRecord(id) {
+        if (!confirm("정말 삭제하시겠습니까?")) {
+          return;
+        }
+
+
+
+
+        try {
+          const { error } = await supabase.from("pages").delete().eq("id", id);
+          if (error) throw error;
+          refreshHistory();
+        } catch (error) {
+          console.error("삭제 실패:", error.message);
+        }
+      }
+
+
+
+
+      // 이벤트 리스너 추가
+      document.getElementById("login").addEventListener("click", signInWithGithub);
+      document.getElementById("logout").addEventListener("click", signOut);
+      document.getElementById("create_btn").addEventListener("click", recordHandler);
+
+
+
+
+      // 초기 실행
+      updateUI();
+      refreshHistory();
+
+
+
+
+      // 삭제 함수를 전역으로 사용 가능하게 설정
+      window.deleteRecord = deleteRecord;
+    });
+  </script>
+</body>
+</html>
